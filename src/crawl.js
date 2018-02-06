@@ -399,6 +399,46 @@ function analyzeMusicDownloadUrl(html) {
   return $('#MediaPlayer1 param[name="URL"]').attr('value').trim();
 }
 
+function loadMusicFile(downloads) {
+  return new Promise(function (resolve, reject) {
+    // job 结果集
+    let ret = [];
+    const q = new Queue(({ url, mid, index }, cb) => {
+      return axios(url, {
+        responseType:'stream'
+      }).then((res) => {
+        const filename = path.join(__dirname, 'download', `${mid}${path.extname(url)}`);
+        res.data.pipe(fs.createWriteStream(filename));
+        ret.push(Object.assign({}, downloads[index], { filename }));
+        cb(null, filename);
+      }).catch((err) => {
+        cb(err);
+      });
+    }, { concurrent: 30, maxRetries: 10, retryDelay: 1000 });
+
+    downloads.forEach(({ id, name, download }, index) => {
+      q.push({
+        id: `${name}-${id}: ${download}`,
+        url: download, 
+        mid: id,
+        index
+      });
+    });
+
+    q.on('task_finish', (taskId, result, stats) => {
+      logger.info(`job-${taskId} 成功`);
+    });
+
+    q.on('task_failed', (taskId, err, stats) => {
+      logger.error(`job-${taskId} 出错, ${err.message}`);
+    });
+
+    q.on('drain', function () {
+      resolve(ret);
+    });
+  });
+}
+
 /**
  * 获取页面安全访问 Cookies
  */
@@ -454,6 +494,13 @@ async function crawl() {
     logger.info('------------ 抓取古曲下载地址 ----------------');
     const downloads = await loadMusicDownloadUrl(musics);
     fs.writeFileSync('downloads.json', JSON.stringify(downloads));
+
+    logger.info('------------ 抓取古曲文件 ----------------');
+    const downloadDir = path.join(__dirname, 'download');
+    if (!fs.existsSync(downloadDir)) {
+      fs.mkdirSync(downloadDir);
+    }
+    await loadMusicFile(downloads);
 
     // logger.info('------------ 写入数据库 -------------');
     // saveToDB(details);
