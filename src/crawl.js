@@ -488,12 +488,12 @@ async function crawl() {
 
     logger.info('------------ 抓取古曲信息 -------------');
     const musics = await loadMusicInfos(categoryPageInfo);
-    fs.writeFileSync('music.json', JSON.stringify(musics));
+    fs.writeFileSync(path.join(__dirname, 'music.json'), JSON.stringify(musics));
     // logger.info(`歌曲数据：${JSON.stringify(musics)}`);
 
     logger.info('------------ 抓取古曲下载地址 ----------------');
     const downloads = await loadMusicDownloadUrl(musics);
-    fs.writeFileSync('downloads.json', JSON.stringify(downloads));
+    fs.writeFileSync(path.join(__dirname, 'downloads.json'), JSON.stringify(downloads));
 
     logger.info('------------ 抓取古曲文件 ----------------');
     const downloadDir = path.join(__dirname, 'download');
