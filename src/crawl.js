@@ -409,8 +409,10 @@ function loadMusicFile(downloads) {
       }).then((res) => {
         const filename = path.join(__dirname, 'download', `${mid}${path.extname(url)}`);
         res.data.pipe(fs.createWriteStream(filename));
-        ret.push(Object.assign({}, downloads[index], { filename }));
-        cb(null, filename);
+        res.data.on('end', () => {
+          ret.push(Object.assign({}, downloads[index], { filename }));
+          cb(null, filename);
+        });
       }).catch((err) => {
         cb(err);
       });
