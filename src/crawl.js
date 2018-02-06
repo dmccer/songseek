@@ -262,75 +262,6 @@ function analyzeCategoryPageInfo(html) {
   };
 }
 
-// function loadMusicInfos(list) {
-//   return new Promise(function (resolve, reject) {
-//     const q = queue();
-//     // 单个 job 超时时间
-//     q.timeout = 20000;
-//     q.concurrency = 30;
-//     // q.autostart = true;
-//     // job 结果集
-//     let ret = [];
-
-//     let totalPageCount = 0;
-
-//     list.forEach((item, index) => {
-//       const total = parseInt(item.total);
-//       const size = parseInt(item.size);
-//       const count = Math.ceil(total / size);
-
-//       totalPageCount += count;
-
-//       for (let i = 0; i < count; i++) {
-//         const page = `${item.prefix}${i}.html`;
-//         const url = `${item.url}${i === 0 ? '' : page}`;
-
-//         // 404 跳过
-//         if (i === 35) {
-//           continue;
-//         }
-
-//         q.push(genIdentifiedJob(function() {
-//           return axios(url, {
-//             responseType: 'arraybuffer',
-//             headers: Object.assign({}, defaultHeaders, {
-//               // Cookie: getUsefulCookies()
-//             })
-//           }).then((res) => {
-//             const html = decodeHtml(res.data, 'gb2312');
-//             const list = analyzeMusicInfo(html, item.index, i);
-//             ret = ret.concat(list);
-//           });
-//         }, `${item.name}-${index}-${i}: ${url}`));
-//       }
-//     });
-
-//     q.on('success', (result, job) => {
-//       logger.info(`job-${job.id} 成功`);
-//     });
-
-//     q.on('error', (err, job) => {
-//       logger.error(`job-${job.id} 出错, ${err.message}`);
-//     });
-
-//     q.on('timeout', (next, job) => {
-//       logger.error(`job-${job.id} 超时`);
-//       next();
-//     });
-
-//     q.start(function (err) {
-//       if (err) {
-//         logger.error(`jobs 出错: ${err.message}`);
-//         // reject(err);
-
-//         return;
-//       }
-
-//       resolve(ret);
-//     });
-//   });
-// }
-
 function loadMusicInfos(list) {
   return new Promise(function (resolve, reject) {
     // job 结果集
@@ -417,6 +348,57 @@ function analyzeMusicInfo(html, categoryId, pageId) {
   return ret;
 }
 
+function loadMusicDownloadUrl(musics) {
+  return new Promise(function (resolve, reject) {
+    // job 结果集
+    let ret = [];
+    const q = new Queue(({ url, index }, cb) => {
+      return axios(url, {
+        responseType: 'arraybuffer',
+        headers: Object.assign({}, defaultHeaders, {
+          // Cookie: getUsefulCookies()
+        })
+      }).then((res) => {
+        const html = decodeHtml(res.data, 'gb2312');
+        const download = analyzeMusicDownloadUrl(html);
+        ret.push(Object.assign({}, musics[index], { download }));
+        cb(null, download);
+      }).catch((err) => {
+        cb(err);
+      });
+    }, { concurrent: 30, maxRetries: 10, retryDelay: 1000 });
+
+    musics.forEach(({ id, name }, index) => {
+      const url = `http://music.guqu.net/guquplayer1.asp?Musicid=${id}&urlid=1`;
+      q.push({
+        id: `${name}-${id}: ${url}`,
+        url, 
+        index
+      });
+    });
+
+    q.on('task_finish', (taskId, result, stats) => {
+      logger.info(`job-${taskId} 成功`);
+    });
+
+    q.on('task_failed', (taskId, err, stats) => {
+      logger.error(`job-${taskId} 出错, ${err.message}`);
+    });
+
+    q.on('drain', function () {
+      resolve(ret);
+    });
+  });
+}
+
+function analyzeMusicDownloadUrl(html) {
+  const $ = cheerio.load(html, {
+    normalizeWhitespace: true,
+    decodeEntities: false
+  });
+  return $('#MediaPlayer1 param[name="URL"]').attr('value').trim();
+}
+
 /**
  * 获取页面安全访问 Cookies
  */
@@ -464,10 +446,14 @@ async function crawl() {
     logger.info(`********** 成功抓取 ${categoryPageInfo.length} 条, 失败 ${list.length - categoryPageInfo.length} 条 ***********`);
     logger.info(`分页数据：${JSON.stringify(categoryPageInfo)}`);
 
-    logger.info('------------ 抓取单个分类古曲地址信息 -------------');
+    logger.info('------------ 抓取古曲信息 -------------');
     const musics = await loadMusicInfos(categoryPageInfo);
     fs.writeFileSync('music.json', JSON.stringify(musics));
     // logger.info(`歌曲数据：${JSON.stringify(musics)}`);
+
+    logger.info('------------ 抓取古曲下载地址 ----------------');
+    const downloads = await loadMusicDownloadUrl(musics);
+    fs.writeFileSync('downloads.json', JSON.stringify(downloads));
 
     // logger.info('------------ 写入数据库 -------------');
     // saveToDB(details);
