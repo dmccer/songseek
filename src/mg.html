@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>maze2</title>
+</head>
+<body>
+    <canvas id="c2d" class="c2d" width="500" height="350"></canvas>
+    <script>
+        var oC2 = document.getElementById('c2d');
+        var ctx = oC2.getContext('2d');
+
+        var width = oC2.width;
+        var height = oC2.height;
+
+        let rows = 20;
+        let cols = 20;
+        let squares = new Map();
+
+        let startR = 0;
+        let startC = 0;
+        let visiteds = [buildSquareKey(startR, startC)];
+        const WALL = {
+          L: 'L',
+          R: 'R',
+          U: 'U',
+          D: 'D'
+        };
+        const SQUARE_VISITED_STATE = {
+          INITIAL: 0,
+          VISITED: 1,
+          UNVISITED: 2
+        };
+        
+        function randomChoice(arr) {
+          let l = arr.length;
+          return arr[Math.round(Math.random() * (l - 1))];
+        }
+
+        function randomVisiteds(visiteds) {
+          let currVisited = randomChoice(visiteds);
+          let arr = currVisited.split('-');
+
+          return {
+            k: currVisited,
+            r: parseInt(arr[0], 10),
+            c: parseInt(arr[1], 10)
+          };
+        }
+
+        function buildSquareKey(r, c) {
+          return `${r}-${c}`;
+        }
+
+        function handleWallState(r, c, wall, check) {
+          let squareKey = buildSquareKey(r, c);
+          let squareState = squares.get(squareKey);
+
+          if (!squareState || squareState.v === SQUARE_VISITED_STATE.INITIAL) {
+            visiteds.push(squareKey);
+            squares.set(squareKey, { v: SQUARE_VISITED_STATE.UNVISITED });
+          } else if (squareState.v === SQUARE_VISITED_STATE.VISITED) {
+            check.push(wall);
+          }
+        }
+
+        function setSquareWallState(r, c, w) {
+          let k = buildSquareKey(r, c)
+          let squareState = squares.get(k);
+          if (!squareState) {
+            squareState = {};
+          }
+          squareState[w] = 1;
+          squares.set(k, squareState);
+        }
+        
+        while (visiteds.length) {
+          let { r, c, k } = randomVisiteds(visiteds);
+          // 设置 r, c 为已标记
+          squares.set(k, { v: SQUARE_VISITED_STATE.VISITED });
+          visiteds.splice(visiteds.indexOf(k), 1);
+          let check = [];
+
+          if (c > 0) {
+            handleWallState(r, c - 1, WALL.L, check);
+          }
+
+          if (r > 0) {
+            handleWallState(r - 1, c, WALL.U, check);
+          }
+
+          if (c < cols - 1) {
+            handleWallState(r, c + 1, WALL.R, check);
+          }
+
+          if (r < rows - 1) {
+            handleWallState(r + 1, c, WALL.D, check);
+          }
+
+          if (check.length) {
+            switch (randomChoice(check)) {
+              case WALL.L:
+                setSquareWallState(r, c, WALL.L);
+                setSquareWallState(r, c - 1, WALL.R);
+                break;
+              case WALL.U:
+                setSquareWallState(r, c, WALL.U);
+                setSquareWallState(r - 1, c, WALL.D);
+                break;
+              case WALL.R:
+                setSquareWallState(r, c, WALL.R);
+                setSquareWallState(r, c + 1, WALL.L);
+                break;
+              case WALL.D:
+                setSquareWallState(r, c, WALL.D);
+                setSquareWallState(r + 1, c, WALL.U);
+                break;
+            }
+          }
+        }
+
+        setSquareWallState(0, 0, WALL.L);
+        setSquareWallState(rows - 1, cols - 1, WALL.R);
+
+        console.log(squares.entries())
+
+        function draw() {
+          const CANVAS_W = 500;
+          const CANVAS_H = 350;
+          let cellW = CANVAS_W / cols;
+          let cellH = CANVAS_H / rows;
+
+          ctx.lineWidth = 3;
+          const fixLine = ctx.lineWidth / 3;
+
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const k = buildSquareKey(r, c);
+              const squareState = squares.get(k);
+
+              const { L, R, U, D } = squareState;
+              const sx = c * cellW;
+              const sy = r * cellH;
+              
+              ctx.strokeStyle = 'rgba(0,0,0,1)';
+              ctx.lineCap = 'round';
+
+              if (L !== 1) {
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - fixLine);
+                ctx.lineTo(sx, sy + cellH + fixLine);
+                ctx.stroke();
+              }
+
+              if (R !== 1) {
+                ctx.beginPath();
+                ctx.moveTo(sx + cellW, sy - fixLine);
+                ctx.lineTo(sx + cellW, sy + cellH + fixLine);
+                ctx.stroke();
+              }
+
+              if (U !== 1) {
+                ctx.beginPath();
+                ctx.moveTo(sx - fixLine, sy);
+                ctx.lineTo(sx + cellW + fixLine, sy);
+                ctx.stroke();
+              }
+
+              if (D !== 1) {
+                ctx.beginPath();
+                ctx.moveTo(sx - fixLine, sy + cellH);
+                ctx.lineTo(sx + cellW + fixLine, sy + cellH);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+
+        draw();
+    </script>
+</body>
+</html>
