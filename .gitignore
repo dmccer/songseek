@@ -86,3 +86,5 @@ typings/
 .env
 
 build
+
+song/
